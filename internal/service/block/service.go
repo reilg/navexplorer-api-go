@@ -21,6 +21,7 @@ type Service interface {
 	GetTransactionByHash(n network.Network, hash string) (*explorer.BlockTransaction, error)
 	GetRawTransactionByHash(n network.Network, hash string) (*explorer.RawBlockTransaction, error)
 	GetSupply(n network.Network, blocks int, fillEmpty bool) ([]entity.Supply, error)
+	GetTotalSpendableSupply(n network.Network, size int, from int) ([]entity.TotalSpendableSupply, error)
 }
 
 type service struct {
@@ -109,4 +110,8 @@ func (s *service) GetRawTransactionByHash(n network.Network, hash string) (*expl
 
 func (s service) GetSupply(n network.Network, blocks int, fillEmpty bool) ([]entity.Supply, error) {
 	return s.blockRepo.GetSupply(n, blocks, fillEmpty)
+}
+
+func (s service) GetTotalSpendableSupply(n network.Network, size int, from int) ([]entity.TotalSpendableSupply, error) {
+	return s.blockRepo.GetTotalSpendableSupply(n, size, from)
 }

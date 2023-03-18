@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
+
 	"github.com/navcoin/navexplorer-api-go/v2/internal/elastic_cache"
 	"github.com/navcoin/navexplorer-api-go/v2/internal/framework"
 	"github.com/navcoin/navexplorer-api-go/v2/internal/service/block/entity"
@@ -12,8 +15,6 @@ import (
 	"github.com/navcoin/navexplorer-indexer-go/v2/pkg/explorer"
 	"github.com/olivere/elastic/v7"
 	"go.uber.org/zap"
-	"strconv"
-	"time"
 )
 
 type BlockRepository interface {
@@ -28,6 +29,7 @@ type BlockRepository interface {
 	GetFeesForLastBlocks(n network.Network, blocks int) (fees float64, err error)
 	GetSupply(n network.Network, blocks int, fillEmpty bool) (supply []entity.Supply, err error)
 	GetStakingAddresses(n network.Network, from, to uint64) ([]string, error)
+	GetTotalSpendableSupply(n network.Network, size int, from int) (supply []entity.TotalSpendableSupply, err error)
 }
 
 var (
@@ -328,7 +330,10 @@ func (r *blockRepository) GetSupply(n network.Network, blocks int, fillEmpty boo
 	if blockResult, found := results.Aggregations.Terms("block"); found {
 		for _, bucket := range blockResult.Buckets {
 			supply := entity.Supply{}
-			block, _ := bucket.KeyNumber.Int64()
+			block, err := bucket.KeyNumber.Int64()
+			if err != nil {
+				zap.S().Debug("FAIL: ", err)
+			}
 			supply.Height = uint64(block)
 			if timeResult, found := bucket.Aggregations.Terms("time"); found {
 				supply.Time, _ = time.Parse(time.RFC3339, *timeResult.Buckets[0].KeyAsString)
@@ -361,7 +366,8 @@ func (r *blockRepository) GetSupply(n network.Network, blocks int, fillEmpty boo
 					supply.Change.Wrapped = int64(*value)
 				}
 			}
-			zap.S().Infof("Adding to supply slice at height %d", supply.Height)
+			// TODO: uncomment this
+			// zap.S().Infof("Adding to supply slice at height %d", supply.Height)
 
 			supplyMap[supply.Height] = &supply
 		}
@@ -383,6 +389,77 @@ func (r *blockRepository) GetSupply(n network.Network, blocks int, fillEmpty boo
 			supplySlice = append(supplySlice, *val)
 		}
 	}
+
+	return
+}
+
+/**
+ * Return an aggregated list of supply
+ */
+func (r *blockRepository) GetTotalSpendableSupply(n network.Network, size int, from int) (supplySlice []entity.TotalSpendableSupply, err error) {
+	// supplyMap := make(map[uint64]*entity.TotalSpendableSupply)
+
+	zap.S().Debug("Hello: ", from, size)
+
+	if size < 100 {
+		size = 100
+	}
+
+	supplyTotalScript := elastic.NewScript("return doc['supply_balance.public'].value + doc['supply_balance.private'].value")
+	avgAgg := elastic.NewAvgAggregation().Script(supplyTotalScript)
+	nested := elastic.NewNestedAggregation().
+		Path("supply_balance").
+		SubAggregation("total_supply", avgAgg)
+
+	agg := elastic.NewHistogramAggregation().
+		Field("height").
+		Interval(float64(size)).
+		SubAggregation("balance", nested)
+
+	// src, _ := agg.Source()
+	// d, _ := json.MarshalIndent(src, "", "  ")
+	// zap.S().Debug("source:", string(d))
+
+	results, err := r.elastic.Client.
+		Search(elastic_cache.BlockIndex.Get(n)).
+		Aggregation("range", agg).
+		Size(0).
+		Do(context.Background())
+	if err != nil {
+		zap.L().With(zap.Error(err)).Error("Failed to get total spendable supply")
+		return
+	}
+
+	// d, _ := json.MarshalIndent(results, "", "  ")
+	// zap.S().Debugf("LIST: %s\n", d)
+
+	// supplyMap := make(map[uint64]*entity.TotalSpendableSupply)
+	if blockResult, found := results.Aggregations.Histogram("range"); found {
+		var previousAvg *float64
+		for _, bucket := range blockResult.Buckets {
+			supply := entity.TotalSpendableSupply{}
+			supply.Height = uint64(bucket.Key)
+
+			if balanceResult, found := bucket.Aggregations.Terms("balance"); found {
+				if totalsResult, found := balanceResult.Aggregations.Avg("total_supply"); found {
+					value := totalsResult.Value
+					if value == nil {
+						value = previousAvg
+					} else {
+						previousAvg = value
+					}
+					supply.Balance = uint64(*value)
+				}
+			}
+
+			// supplyMap[supply.Height] = &supply
+			supplySlice = append(supplySlice, supply)
+		}
+	}
+
+	// for _, i := range supplyMap {
+	// 	supplySlice = append(supplySlice, *i)
+	// }
 
 	return
 }

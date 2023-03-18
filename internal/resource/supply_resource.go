@@ -1,11 +1,12 @@
 package resource
 
 import (
-	"github.com/navcoin/navexplorer-api-go/v2/internal/service/block"
-	"github.com/navcoin/navexplorer-api-go/v2/internal/service/dao/consensus"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/navcoin/navexplorer-api-go/v2/internal/service/block"
+	"github.com/navcoin/navexplorer-api-go/v2/internal/service/dao/consensus"
 )
 
 type SupplyResource struct {
@@ -22,6 +23,7 @@ func (r *SupplyResource) GetSupply(c *gin.Context) {
 	if err != nil {
 		blocks = r.consensusService.GetParameter(network(c), consensus.VOTING_CYCLE_LENGTH).Value
 	}
+
 	fillEmpty, err := strconv.ParseBool(c.Query("fill"))
 	if err != nil {
 		fillEmpty = true

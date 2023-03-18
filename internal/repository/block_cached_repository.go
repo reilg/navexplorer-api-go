@@ -74,3 +74,7 @@ func (r *cachingBlockRepository) GetSupply(n network.Network, blocks int, fillEm
 func (r *cachingBlockRepository) GetStakingAddresses(n network.Network, from, to uint64) ([]string, error) {
 	return r.repository.GetStakingAddresses(n, from, to)
 }
+
+func (r *cachingBlockRepository) GetTotalSpendableSupply(n network.Network, size int, from int) (supply []entity.TotalSpendableSupply, err error) {
+	return r.repository.GetTotalSpendableSupply(n, size, from)
+}

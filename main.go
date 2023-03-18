@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-gonic/gin"
 	"github.com/navcoin/navexplorer-api-go/v2/generated/dic"
 	"github.com/navcoin/navexplorer-api-go/v2/internal/config"
 	"github.com/navcoin/navexplorer-api-go/v2/internal/framework"
 	"github.com/navcoin/navexplorer-api-go/v2/internal/resource"
-	"github.com/gin-contrib/gzip"
-	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 )
 
 var container *dic.Container
@@ -107,6 +108,9 @@ func main() {
 
 	supplyResource := resource.NewSupplyResource(container.GetBlockService(), container.GetDaoConsensusService())
 	r.GET("/supply", supplyResource.GetSupply)
+
+	statResource := resource.NewStatResource(container.GetBlockService())
+	r.GET("/stats/supply", statResource.GetTotalSpendableSupply)
 
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"code": 404, "message": "Resource not found"})
